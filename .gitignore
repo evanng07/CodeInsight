@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+env/
+venv/
+ENV/
+venv.bak/
+*.venv/
+
+# Pytest cache
+.cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Flask instance folder (if using Flask's instance folder)
+instance/
+.webassets-cache
+
+# IDEs and editors
+.vscode/
+.idea/
+
+# Environment variables file
+*.env
+
+# OS-specific files
+.DS_Store
+
+# Call graph JSON (generated file)
+call_graph.json

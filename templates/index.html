@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Codebase Call Graph</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #f7f7f7;
+    }
+    svg {
+      border: 1px solid #ccc;
+      background: white;
+    }
+    .node {
+      stroke: #fff;
+      stroke-width: 1.5px;
+    }
+    .link {
+      stroke: #999;
+      stroke-opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <h1>Codebase Call Graph</h1>
+  <svg width="960" height="600"></svg>
+  
+  <!-- Include D3.js -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    // Fetch the call graph data from the Flask backend
+    fetch('/data')
+      .then(response => response.json())
+      .then(data => {
+        // Convert the call graph data into nodes and links
+        const nodes = [];
+        const nodeSet = new Set();
+        const links = [];
+
+        // Create nodes for each function and links for each call relationship
+        for (const func in data) {
+          nodeSet.add(func);
+          data[func].forEach(calledFunc => {
+            nodeSet.add(calledFunc);
+            links.push({ source: func, target: calledFunc });
+          });
+        }
+        nodeSet.forEach(n => nodes.push({ id: n }));
+
+        const svg = d3.select("svg"),
+              width = +svg.attr("width"),
+              height = +svg.attr("height");
+
+        // Create a simulation with forces
+        const simulation = d3.forceSimulation(nodes)
+          .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+          .force("charge", d3.forceManyBody().strength(-300))
+          .force("center", d3.forceCenter(width / 2, height / 2));
+
+        // Draw links (lines)
+        const link = svg.append("g")
+            .attr("class", "links")
+          .selectAll("line")
+          .data(links)
+          .enter().append("line")
+            .attr("class", "link");
+
+        // Draw nodes (circles)
+        const node = svg.append("g")
+            .attr("class", "nodes")
+          .selectAll("circle")
+          .data(nodes)
+          .enter().append("circle")
+            .attr("class", "node")
+            .attr("r", 10)
+            .attr("fill", "#69b3a2")
+            .call(d3.drag()
+              .on("start", dragstarted)
+              .on("drag", dragged)
+              .on("end", dragended));
+
+        // Add text labels for nodes
+        const labels = svg.append("g")
+            .attr("class", "labels")
+          .selectAll("text")
+          .data(nodes)
+          .enter().append("text")
+            .attr("dy", -15)
+            .attr("text-anchor", "middle")
+            .text(d => d.id)
+            .style("font-size", "12px");
+
+        simulation.on("tick", () => {
+          link
+              .attr("x1", d => d.source.x)
+              .attr("y1", d => d.source.y)
+              .attr("x2", d => d.target.x)
+              .attr("y2", d => d.target.y);
+
+          node
+              .attr("cx", d => d.x)
+              .attr("cy", d => d.y);
+
+          labels
+              .attr("x", d => d.x)
+              .attr("y", d => d.y);
+        });
+
+        function dragstarted(event, d) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }
+      });
+  </script>
+</body>
+</html>
