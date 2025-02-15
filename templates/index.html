@@ -5,7 +5,7 @@
   <title>Codebase Call Graph</title>
   <style>
     body {
-      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-family: Arial, sans-serif;
       background: #f7f7f7;
     }
     svg {
@@ -15,50 +15,69 @@
     .node {
       stroke: #fff;
       stroke-width: 1.5px;
+      cursor: pointer;
     }
     .link {
       stroke: #999;
       stroke-opacity: 0.6;
+    }
+    /* Style for the code display panel */
+    #code-display {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 40%;
+      height: 80%;
+      overflow: auto;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      padding: 10px;
+      white-space: pre;
+      font-family: "Courier New", Courier, monospace;
     }
   </style>
 </head>
 <body>
   <h1>Codebase Call Graph</h1>
   <svg width="960" height="600"></svg>
+  <!-- A panel to display the function's code -->
+  <div id="code-display">Click on a node to display the function code here.</div>
   
   <!-- Include D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
-    // Fetch the call graph data from the Flask backend
+    // Fetch the call graph data (which now includes function code)
     fetch('/data')
       .then(response => response.json())
       .then(data => {
-        // Convert the call graph data into nodes and links
         const nodes = [];
         const nodeSet = new Set();
         const links = [];
 
-        // Create nodes for each function and links for each call relationship
+        // data is an object mapping function names to {code, calls}
         for (const func in data) {
           nodeSet.add(func);
-          data[func].forEach(calledFunc => {
+          data[func].calls.forEach(calledFunc => {
             nodeSet.add(calledFunc);
             links.push({ source: func, target: calledFunc });
           });
         }
-        nodeSet.forEach(n => nodes.push({ id: n }));
-
+        // Create nodes with an id and code snippet (if available)
+        nodeSet.forEach(funcName => {
+          nodes.push({ id: funcName, code: data[funcName] ? data[funcName].code : "No code available" });
+        });
+        
         const svg = d3.select("svg"),
               width = +svg.attr("width"),
               height = +svg.attr("height");
 
-        // Create a simulation with forces
+        // Setup the simulation with forces
         const simulation = d3.forceSimulation(nodes)
           .force("link", d3.forceLink(links).id(d => d.id).distance(100))
           .force("charge", d3.forceManyBody().strength(-300))
           .force("center", d3.forceCenter(width / 2, height / 2));
 
-        // Draw links (lines)
+        // Draw links
         const link = svg.append("g")
             .attr("class", "links")
           .selectAll("line")
@@ -66,7 +85,7 @@
           .enter().append("line")
             .attr("class", "link");
 
-        // Draw nodes (circles)
+        // Draw nodes and attach click event
         const node = svg.append("g")
             .attr("class", "nodes")
           .selectAll("circle")
@@ -78,9 +97,13 @@
             .call(d3.drag()
               .on("start", dragstarted)
               .on("drag", dragged)
-              .on("end", dragended));
+              .on("end", dragended))
+            .on("click", function(event, d) {
+              // Display the code in the code-display div when a node is clicked
+              d3.select("#code-display").text(d.code);
+            });
 
-        // Add text labels for nodes
+        // Add labels for nodes
         const labels = svg.append("g")
             .attr("class", "labels")
           .selectAll("text")
@@ -112,12 +135,10 @@
           d.fx = d.x;
           d.fy = d.y;
         }
-
         function dragged(event, d) {
           d.fx = event.x;
           d.fy = event.y;
         }
-
         function dragended(event, d) {
           if (!event.active) simulation.alphaTarget(0);
           d.fx = null;
