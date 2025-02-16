@@ -60,10 +60,15 @@
       stroke-width: 1.5px;
       cursor: pointer;
       fill: #69b3a2;
+      opacity: 1;
+      transition: transform 0.3s ease;
     }
     .link {
       stroke: #555;
-      stroke-opacity: 0.6;
+      stroke-opacity: 1;
+      stroke-width: 1.5px;
+      fill: none;
+      transition: opacity 0.5s ease;
     }
     .labels text {
       font-size: 12px;
@@ -122,6 +127,11 @@
       gap: 5px;
       z-index: 3000;
     }
+    /* Style for the moving dot on edges */
+    .edge-dot {
+      fill: #ff0000;
+      r: 4;
+    }
   </style>
 </head>
 <body>
@@ -133,7 +143,18 @@
     </div>
   </header>
   <div id="graph-container">
-    <svg></svg>
+    <svg>
+      <defs>
+        <!-- Outgoing arrow marker: for edges where selected node is caller -->
+        <marker id="arrow" markerWidth="12" markerHeight="12" refX="25" refY="6" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,12 L12,6 Z" fill="#ffff00" stroke="#ffcc00" stroke-width="1"/>
+        </marker>
+        <!-- Incoming arrow marker: for edges where selected node is callee -->
+        <marker id="arrow-start" markerWidth="12" markerHeight="12" refX="0" refY="6" orient="auto" markerUnits="strokeWidth">
+          <path d="M12,0 L12,12 L0,6 Z" fill="#ffff00" stroke="#ffcc00" stroke-width="1"/>
+        </marker>
+      </defs>
+    </svg>
   </div>
   <!-- Container for minimized panels -->
   <div id="minimized-panels"></div>
@@ -171,7 +192,6 @@
     // Function to create a code panel.
     function createCodePanel(d) {
       if (codePanels.has(d.id)) {
-        // Bring existing panel to front.
         const existingPanel = codePanels.get(d.id);
         existingPanel.style.zIndex = parseInt(existingPanel.style.zIndex) + 1;
         return existingPanel;
@@ -189,13 +209,12 @@
       
       const btnContainer = document.createElement("div");
       
-      // Minimize button: instead of toggling content, it minimizes the whole panel.
+      // Minimize button: minimizes the whole panel to a button at the bottom.
       const minimizeBtn = document.createElement("button");
       minimizeBtn.textContent = "_";
       minimizeBtn.title = "Minimize";
       minimizeBtn.addEventListener("click", () => {
         panel.style.display = "none";
-        // Create a minimized button.
         const minBtn = document.createElement("button");
         minBtn.textContent = d.id;
         minBtn.title = "Restore";
@@ -204,7 +223,6 @@
         minBtn.style.border = "none";
         minBtn.style.borderRadius = "3px";
         minBtn.style.cursor = "pointer";
-        // When clicked, remove the minimized button and restore the panel.
         minBtn.addEventListener("click", () => {
           panel.style.display = "block";
           minimizedContainer.removeChild(minBtn);
@@ -288,12 +306,65 @@
       return panel;
     }
     
-    // Function to open (or bring forward) the code panel for a node.
+    // Function to open the code panel for a node.
     function openCodePanelForNode(d) {
       createCodePanel(d);
     }
     
-    // Fetch and build graph.
+    // Function to animate a dot along an edge.
+    function animateEdgeDot(edge, duration = 2000) {
+      // Remove any existing animated dot on this edge.
+      d3.select(edge).select("circle.edge-dot").remove();
+
+      // Append a small circle (dot) to the container.
+      const d = edge.__data__;
+      const x1 = d.source.x, y1 = d.source.y;
+      const x2 = d.target.x, y2 = d.target.y;
+      
+      // Create the dot.
+      const dot = container.append("circle")
+        .attr("class", "edge-dot")
+        .attr("r", 4)
+        .attr("fill", "#ff0000")
+        .attr("cx", x1)
+        .attr("cy", y1);
+      
+      // Calculate the total distance.
+      const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+      // Animate the dot along the line.
+      function repeat() {
+        dot
+          .attr("cx", x1)
+          .attr("cy", y1)
+          .transition()
+          .duration(duration)
+          .ease(d3.easeLinear)
+          .attrTween("transform", function() {
+            return function(t) {
+              const x = x1 + (x2 - x1) * t;
+              const y = y1 + (y2 - y1) * t;
+              return `translate(${x - x1},${y - y1})`;
+            };
+          })
+          .on("end", repeat);
+      }
+      repeat();
+    }
+    
+    // Function to animate dots on all edges connected to the selected node.
+    function animateSelectedEdges(selected) {
+      // First, remove existing edge dots.
+      container.selectAll("circle.edge-dot").remove();
+      // For each link connected to the selected node, animate a dot.
+      link.each(function(d) {
+        if (d.source.id === selected.id || d.target.id === selected.id) {
+          animateEdgeDot(this);
+        }
+      });
+    }
+    
+    // Fetch and build the graph.
     fetch('/data')
       .then(response => response.json())
       .then(data => {
@@ -340,7 +411,8 @@
           .data(links)
           .enter().append("line")
             .attr("class", "link")
-            .attr("stroke-width", 1.5);
+            .attr("stroke-width", 1.5)
+            .attr("marker-end", ""); // Initially no markers.
         
         node = container.append("g")
             .attr("class", "nodes")
@@ -359,6 +431,7 @@
               updateNodeStyles();
               openCodePanelForNode(d);
               zoomToNode(d);
+              highlightConnections(d);
             });
         
         labels = container.append("g")
@@ -366,7 +439,7 @@
           .selectAll("text")
           .data(nodes)
           .enter().append("text")
-            .attr("dy", -15)
+            .attr("dy", d => d.id === selectedNodeId ? -25 : -15)
             .attr("text-anchor", "middle")
             .text(d => d.id);
         
@@ -404,6 +477,66 @@
       svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
     }
     
+    function highlightConnections(selected) {
+      // Animate links: if selected is caller, set marker-end; if callee, marker-start.
+      link.transition().duration(500)
+          .attr("opacity", d => (d.source.id === selected.id || d.target.id === selected.id) ? 1 : 0.1)
+          .attr("marker-end", d => (d.source.id === selected.id) ? "url(#arrow)" : "")
+          .attr("marker-start", d => (d.target.id === selected.id) ? "url(#arrow-start)" : "");
+      
+      node.transition().duration(500).attr("opacity", d => {
+        return (d.id === selected.id ||
+                allLinks.some(l => (l.source.id === selected.id && l.target.id === d.id) ||
+                                   (l.target.id === selected.id && l.source.id === d.id)))
+               ? 1 : 0.2;
+      });
+      
+      // Animate moving dots along the selected edges.
+      animateSelectedEdges(selected);
+    }
+    
+    function animateSelectedEdges(selected) {
+      // Remove any existing animated dots.
+      container.selectAll("circle.edge-dot").remove();
+      // For each link connected to the selected node, animate a dot.
+      link.each(function(d) {
+        if (d.source.id === selected.id || d.target.id === selected.id) {
+          animateEdgeDot(this);
+        }
+      });
+    }
+    
+    // Animate a dot along a given edge.
+    function animateEdgeDot(edge, duration = 2000) {
+      d3.select(edge).select("circle.edge-dot").remove();
+      const d = edge.__data__;
+      const x1 = d.source.x, y1 = d.source.y;
+      const x2 = d.target.x, y2 = d.target.y;
+      const dot = container.append("circle")
+        .attr("class", "edge-dot")
+        .attr("r", 4)
+        .attr("fill", "#ff0000")
+        .attr("cx", x1)
+        .attr("cy", y1);
+      function repeat() {
+        dot
+          .attr("cx", x1)
+          .attr("cy", y1)
+          .transition()
+          .duration(duration)
+          .ease(d3.easeLinear)
+          .attrTween("transform", function() {
+            return function(t) {
+              const x = x1 + (x2 - x1) * t;
+              const y = y1 + (y2 - y1) * t;
+              return `translate(${x - x1},${y - y1})`;
+            };
+          })
+          .on("end", repeat);
+      }
+      repeat();
+    }
+    
     const searchInput = document.getElementById("search-input");
     searchInput.addEventListener("change", () => {
       const query = searchInput.value.trim().toLowerCase();
@@ -413,6 +546,7 @@
         updateNodeStyles();
         openCodePanelForNode(exactMatch);
         zoomToNode(exactMatch);
+        highlightConnections(exactMatch);
       } else {
         selectedNodeId = null;
         updateNodeStyles();
@@ -427,9 +561,23 @@
         updateNodeStyles();
         openCodePanelForNode(exactMatch);
         zoomToNode(exactMatch);
+        highlightConnections(exactMatch);
       } else {
         selectedNodeId = null;
         updateNodeStyles();
+      }
+    });
+    
+    // Listen for Escape key to clear selection.
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        selectedNodeId = null;
+        updateNodeStyles();
+        link.transition().duration(500)
+            .attr("opacity", 1)
+            .attr("marker-end", "")
+            .attr("marker-start", "");
+        container.selectAll("circle.edge-dot").remove();
       }
     });
     
