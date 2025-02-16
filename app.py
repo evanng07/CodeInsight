@@ -2,11 +2,11 @@
 from flask import Flask, jsonify, render_template
 import os
 import ast
+import json
 
 app = Flask(__name__)
-call_graph_data = {}  # Global variable to store analysis results
 
-# --- Your Analyzer Functions ---
+# --- Analyzer Functions (unchanged) ---
 class CallGraphAnalyzer(ast.NodeVisitor):
     def __init__(self, source):
         self.call_graph = {}
@@ -62,14 +62,17 @@ def analyze_directory(directory):
 # --- Flask Routes ---
 @app.route("/")
 def index():
-    # Render the index page (ensure that templates/index.html exists)
     return render_template("index.html")
 
 @app.route("/data")
 def data():
-    global call_graph_data
-    return jsonify(call_graph_data)
+    # Read the call graph data from the JSON file.
+    if os.path.exists("call_graph.json"):
+        with open("call_graph.json", "r", encoding="utf-8") as f:
+            call_graph_data = json.load(f)
+        return jsonify(call_graph_data)
+    else:
+        return jsonify({"error": "No call graph data available"}), 404
 
 if __name__ == "__main__":
-    # For local testing, you might set a default directory here.
     app.run(debug=True)

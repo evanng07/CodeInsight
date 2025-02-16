@@ -21,7 +21,6 @@
       stroke: #999;
       stroke-opacity: 0.6;
     }
-    /* Style for the code display panel */
     #code-display {
       position: absolute;
       top: 10px;
@@ -40,13 +39,11 @@
 <body>
   <h1>Codebase Call Graph</h1>
   <svg width="960" height="600"></svg>
-  <!-- A panel to display the function's code -->
   <div id="code-display">Click on a node to display the function code here.</div>
   
   <!-- Include D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
-    // Fetch the call graph data (which now includes function code)
     fetch('/data')
       .then(response => response.json())
       .then(data => {
@@ -54,7 +51,6 @@
         const nodeSet = new Set();
         const links = [];
 
-        // data is an object mapping function names to {code, calls}
         for (const func in data) {
           nodeSet.add(func);
           data[func].calls.forEach(calledFunc => {
@@ -62,7 +58,6 @@
             links.push({ source: func, target: calledFunc });
           });
         }
-        // Create nodes with an id and code snippet (if available)
         nodeSet.forEach(funcName => {
           nodes.push({ id: funcName, code: data[funcName] ? data[funcName].code : "No code available" });
         });
@@ -71,13 +66,11 @@
               width = +svg.attr("width"),
               height = +svg.attr("height");
 
-        // Setup the simulation with forces
         const simulation = d3.forceSimulation(nodes)
           .force("link", d3.forceLink(links).id(d => d.id).distance(100))
           .force("charge", d3.forceManyBody().strength(-300))
           .force("center", d3.forceCenter(width / 2, height / 2));
 
-        // Draw links
         const link = svg.append("g")
             .attr("class", "links")
           .selectAll("line")
@@ -85,7 +78,6 @@
           .enter().append("line")
             .attr("class", "link");
 
-        // Draw nodes and attach click event
         const node = svg.append("g")
             .attr("class", "nodes")
           .selectAll("circle")
@@ -99,11 +91,9 @@
               .on("drag", dragged)
               .on("end", dragended))
             .on("click", function(event, d) {
-              // Display the code in the code-display div when a node is clicked
               d3.select("#code-display").text(d.code);
             });
 
-        // Add labels for nodes
         const labels = svg.append("g")
             .attr("class", "labels")
           .selectAll("text")
