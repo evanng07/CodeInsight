@@ -5,8 +5,15 @@ import ast
 import json
 
 app = Flask(__name__)
+call_graph_data = {}  # Global variable to store analysis results
 
-# --- Analyzer Functions (unchanged) ---
+def update_call_graph_data(data):
+    """Update the global call graph data."""
+    global call_graph_data
+    call_graph_data.clear()
+    call_graph_data.update(data)
+
+# --- Analyzer Functions ---
 class CallGraphAnalyzer(ast.NodeVisitor):
     def __init__(self, source):
         self.call_graph = {}
@@ -62,17 +69,13 @@ def analyze_directory(directory):
 # --- Flask Routes ---
 @app.route("/")
 def index():
+    # Render the index page (ensure that templates/index.html exists)
     return render_template("index.html")
 
 @app.route("/data")
 def data():
-    # Read the call graph data from the JSON file.
-    if os.path.exists("call_graph.json"):
-        with open("call_graph.json", "r", encoding="utf-8") as f:
-            call_graph_data = json.load(f)
-        return jsonify(call_graph_data)
-    else:
-        return jsonify({"error": "No call graph data available"}), 404
+    # Serve the current call graph data as JSON
+    return jsonify(call_graph_data)
 
 if __name__ == "__main__":
     app.run(debug=True)
