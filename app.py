@@ -3,6 +3,7 @@ from flask import Flask, jsonify, render_template
 import os
 import ast
 import json
+import builtins
 
 app = Flask(__name__)
 call_graph_data = {}  # Global variable to store analysis results
@@ -32,6 +33,7 @@ class CallGraphAnalyzer(ast.NodeVisitor):
         self.current_function = prev_function
 
     def visit_Call(self, node):
+        # Determine the function name based on the call type.
         if isinstance(node.func, ast.Name):
             func_name = node.func.id
         elif isinstance(node.func, ast.Attribute):
@@ -63,18 +65,31 @@ def analyze_directory(directory):
             if file.endswith(".py"):
                 filepath = os.path.join(root, file)
                 file_graph = analyze_file(filepath)
+                # Merge definitions – later definitions may override earlier ones.
                 complete_graph.update(file_graph)
+    
+    # Filtering Step:
+    # Only include calls to functions that:
+    #   a) Are defined in the codebase (keys in complete_graph)
+    #   b) Are not built-in functions.
+    defined_functions = set(complete_graph.keys())
+    built_in_names = {name for name, obj in vars(builtins).items() if callable(obj)}
+    
+    for func, details in complete_graph.items():
+        details["calls"] = [
+            call for call in details["calls"]
+            if call in defined_functions and call not in built_in_names
+        ]
+    
     return complete_graph
 
 # --- Flask Routes ---
 @app.route("/")
 def index():
-    # Render the index page (ensure that templates/index.html exists)
     return render_template("index.html")
 
 @app.route("/data")
 def data():
-    # Serve the current call graph data as JSON
     return jsonify(call_graph_data)
 
 if __name__ == "__main__":

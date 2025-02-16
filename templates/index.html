@@ -3,13 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <title>Codebase Call Graph</title>
+  <!-- Highlight.js CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
   <style>
     body {
-      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
       background: #f7f7f7;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      background: #4a90e2;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      font-size: 1.5em;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    #graph-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
     }
     svg {
-      border: 1px solid #ccc;
+      width: 100%;
+      height: 100%;
       background: white;
     }
     .node {
@@ -21,29 +42,50 @@
       stroke: #999;
       stroke-opacity: 0.6;
     }
+    .labels text {
+      font-size: 12px;
+      fill: #333;
+      pointer-events: none;
+    }
     #code-display {
       position: absolute;
       top: 10px;
       right: 10px;
-      width: 40%;
+      width: 35%;
       height: 80%;
-      overflow: auto;
-      background: #f0f0f0;
+      overflow-y: auto;
+      background: #fff;
       border: 1px solid #ccc;
       padding: 10px;
-      white-space: pre;
       font-family: "Courier New", Courier, monospace;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 10;
+    }
+    /* Ensure code block styling */
+    #code-display pre {
+      margin: 0;
+      padding: 0;
     }
   </style>
 </head>
 <body>
-  <h1>Codebase Call Graph</h1>
-  <svg width="960" height="600"></svg>
-  <div id="code-display">Click on a node to display the function code here.</div>
-  
+  <header>Codebase Call Graph</header>
+  <div id="graph-container">
+    <svg></svg>
+    <div id="code-display">
+      <pre><code class="python">Click on a node to display its function code here.</code></pre>
+    </div>
+  </div>
+
   <!-- Include D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- Include Highlight.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
   <script>
+    // Initialize Highlight.js
+    hljs.highlightAll();
+
+    // Fetch the call graph data from the Flask endpoint.
     fetch('/data')
       .then(response => response.json())
       .then(data => {
@@ -51,6 +93,7 @@
         const nodeSet = new Set();
         const links = [];
 
+        // Build the set of nodes and links.
         for (const func in data) {
           nodeSet.add(func);
           data[func].calls.forEach(calledFunc => {
@@ -62,23 +105,38 @@
           nodes.push({ id: funcName, code: data[funcName] ? data[funcName].code : "No code available" });
         });
         
-        const svg = d3.select("svg"),
-              width = +svg.attr("width"),
-              height = +svg.attr("height");
+        const svg = d3.select("svg");
+        const width = svg.node().clientWidth;
+        const height = svg.node().clientHeight;
+        
+        // Create a container group for zoom/pan.
+        const container = svg.append("g");
 
+        // Setup zoom behavior.
+        const zoom = d3.zoom()
+          .scaleExtent([0.2, 5])
+          .on("zoom", (event) => {
+            container.attr("transform", event.transform);
+          });
+        svg.call(zoom);
+
+        // Create the force simulation.
         const simulation = d3.forceSimulation(nodes)
-          .force("link", d3.forceLink(links).id(d => d.id).distance(100))
-          .force("charge", d3.forceManyBody().strength(-300))
+          .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+          .force("charge", d3.forceManyBody().strength(-400))
           .force("center", d3.forceCenter(width / 2, height / 2));
 
-        const link = svg.append("g")
+        // Draw links.
+        const link = container.append("g")
             .attr("class", "links")
           .selectAll("line")
           .data(links)
           .enter().append("line")
-            .attr("class", "link");
+            .attr("class", "link")
+            .attr("stroke-width", 1.5);
 
-        const node = svg.append("g")
+        // Draw nodes.
+        const node = container.append("g")
             .attr("class", "nodes")
           .selectAll("circle")
           .data(nodes)
@@ -91,18 +149,22 @@
               .on("drag", dragged)
               .on("end", dragended))
             .on("click", function(event, d) {
-              d3.select("#code-display").text(d.code);
+              // Update the code display with the node's code.
+              const codeBlock = document.querySelector("#code-display pre code");
+              codeBlock.textContent = d.code;
+              // Re-highlight the code block.
+              hljs.highlightElement(codeBlock);
             });
 
-        const labels = svg.append("g")
+        // Add labels.
+        const labels = container.append("g")
             .attr("class", "labels")
           .selectAll("text")
           .data(nodes)
           .enter().append("text")
             .attr("dy", -15)
             .attr("text-anchor", "middle")
-            .text(d => d.id)
-            .style("font-size", "12px");
+            .text(d => d.id);
 
         simulation.on("tick", () => {
           link
