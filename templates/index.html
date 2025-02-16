@@ -2,26 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Codebase Call Graph</title>
-  <!-- Highlight.js CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+  <title>CodeInsight</title>
+  <!-- Highlight.js CSS for dark mode (using Atom One Dark theme) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
   <style>
+    /* Dark Mode Styles */
     body {
       margin: 0;
       padding: 0;
       font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-      background: #f7f7f7;
+      background: #121212;
+      color: #e0e0e0;
       display: flex;
       flex-direction: column;
       height: 100vh;
     }
     header {
-      background: #4a90e2;
-      color: white;
+      background: #1f1f1f;
+      color: #e0e0e0;
       padding: 15px;
       text-align: center;
       font-size: 1.5em;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     }
     #graph-container {
       flex: 1;
@@ -31,22 +33,23 @@
     svg {
       width: 100%;
       height: 100%;
-      background: white;
+      background: #1e1e1e;
     }
     .node {
-      stroke: #fff;
+      stroke: #121212;
       stroke-width: 1.5px;
       cursor: pointer;
     }
     .link {
-      stroke: #999;
+      stroke: #555;
       stroke-opacity: 0.6;
     }
     .labels text {
       font-size: 12px;
-      fill: #333;
+      fill: #e0e0e0;
       pointer-events: none;
     }
+    /* Code display panel - hidden by default */
     #code-display {
       position: absolute;
       top: 10px;
@@ -54,26 +57,34 @@
       width: 35%;
       height: 80%;
       overflow-y: auto;
-      background: #fff;
-      border: 1px solid #ccc;
+      background: #1e1e1e;
+      border: 1px solid #333;
       padding: 10px;
       font-family: "Courier New", Courier, monospace;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.7);
       z-index: 10;
+      display: none;
     }
-    /* Ensure code block styling */
     #code-display pre {
       margin: 0;
       padding: 0;
     }
+    /* Metadata styling for file info and breadcrumbs */
+    .metadata {
+      background: #2e2e2e;
+      border-bottom: 1px solid #444;
+      padding: 5px;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+    }
   </style>
 </head>
 <body>
-  <header>Codebase Call Graph</header>
+  <header>Codebase Call Graph (Dark Mode)</header>
   <div id="graph-container">
     <svg></svg>
     <div id="code-display">
-      <pre><code class="python">Click on a node to display its function code here.</code></pre>
+      <!-- This panel is hidden initially and will be populated on node click -->
     </div>
   </div>
 
@@ -93,7 +104,7 @@
         const nodeSet = new Set();
         const links = [];
 
-        // Build the set of nodes and links.
+        // Build nodes and link data.
         for (const func in data) {
           nodeSet.add(func);
           data[func].calls.forEach(calledFunc => {
@@ -102,31 +113,33 @@
           });
         }
         nodeSet.forEach(funcName => {
-          nodes.push({ id: funcName, code: data[funcName] ? data[funcName].code : "No code available" });
+          nodes.push({ 
+            id: funcName, 
+            code: data[funcName] ? data[funcName].code : "No code available",
+            file: data[funcName] ? data[funcName].file : "Unknown file",
+            breadcrumbs: data[funcName] ? data[funcName].breadcrumbs : "No breadcrumbs"
+          });
         });
         
         const svg = d3.select("svg");
         const width = svg.node().clientWidth;
         const height = svg.node().clientHeight;
         
-        // Create a container group for zoom/pan.
+        // Create a container group for zoom and pan.
         const container = svg.append("g");
-
-        // Setup zoom behavior.
+        
         const zoom = d3.zoom()
           .scaleExtent([0.2, 5])
           .on("zoom", (event) => {
             container.attr("transform", event.transform);
           });
         svg.call(zoom);
-
-        // Create the force simulation.
+        
         const simulation = d3.forceSimulation(nodes)
           .force("link", d3.forceLink(links).id(d => d.id).distance(150))
           .force("charge", d3.forceManyBody().strength(-400))
           .force("center", d3.forceCenter(width / 2, height / 2));
-
-        // Draw links.
+        
         const link = container.append("g")
             .attr("class", "links")
           .selectAll("line")
@@ -134,8 +147,7 @@
           .enter().append("line")
             .attr("class", "link")
             .attr("stroke-width", 1.5);
-
-        // Draw nodes.
+        
         const node = container.append("g")
             .attr("class", "nodes")
           .selectAll("circle")
@@ -149,14 +161,19 @@
               .on("drag", dragged)
               .on("end", dragended))
             .on("click", function(event, d) {
-              // Update the code display with the node's code.
-              const codeBlock = document.querySelector("#code-display pre code");
-              codeBlock.textContent = d.code;
-              // Re-highlight the code block.
-              hljs.highlightElement(codeBlock);
+              // Update and display the code panel when a node is clicked.
+              const codeDisplay = document.getElementById("code-display");
+              codeDisplay.style.display = "block";  // Show the panel.
+              codeDisplay.innerHTML = `
+                <div class="metadata">
+                  <strong>File:</strong> ${d.file}<br>
+                  <strong>Path:</strong> ${d.breadcrumbs}
+                </div>
+                <pre><code class="python">${d.code}</code></pre>
+              `;
+              hljs.highlightElement(document.querySelector("#code-display pre code"));
             });
-
-        // Add labels.
+        
         const labels = container.append("g")
             .attr("class", "labels")
           .selectAll("text")
@@ -165,23 +182,21 @@
             .attr("dy", -15)
             .attr("text-anchor", "middle")
             .text(d => d.id);
-
+        
         simulation.on("tick", () => {
           link
               .attr("x1", d => d.source.x)
               .attr("y1", d => d.source.y)
               .attr("x2", d => d.target.x)
               .attr("y2", d => d.target.y);
-
           node
               .attr("cx", d => d.x)
               .attr("cy", d => d.y);
-
           labels
               .attr("x", d => d.x)
               .attr("y", d => d.y);
         });
-
+        
         function dragstarted(event, d) {
           if (!event.active) simulation.alphaTarget(0.3).restart();
           d.fx = d.x;

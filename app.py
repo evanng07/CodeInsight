@@ -27,6 +27,7 @@ class CallGraphAnalyzer(ast.NodeVisitor):
         self.current_function = node.name
         if node.name not in self.call_graph:
             self.call_graph[node.name] = []
+        # Get the function code snippet.
         code_snippet = ast.get_source_segment(self.source, node)
         self.function_code[node.name] = code_snippet if code_snippet else ""
         self.generic_visit(node)
@@ -55,23 +56,34 @@ def analyze_file(filepath):
         result[func] = {
             "code": analyzer.function_code.get(func, ""),
             "calls": analyzer.call_graph[func]
+            # "file" and "breadcrumbs" will be added in analyze_directory.
         }
     return result
 
 def analyze_directory(directory):
+    """
+    Analyze all Python files in the given directory.
+    For each function, add:
+      - "file": the relative file path where the function is defined.
+      - "breadcrumbs": a string showing the file's directory hierarchy.
+    Then, filter out calls to functions that are built-ins or not defined in the codebase.
+    """
     complete_graph = {}
     for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(".py"):
                 filepath = os.path.join(root, file)
+                # Compute relative path from the project root.
+                relative_path = os.path.relpath(filepath, directory)
                 file_graph = analyze_file(filepath)
-                # Merge definitions – later definitions may override earlier ones.
+                for func in file_graph:
+                    file_graph[func]["file"] = relative_path
+                    # Create breadcrumbs: join each part of the path with " > "
+                    breadcrumbs = " > ".join(relative_path.split(os.sep))
+                    file_graph[func]["breadcrumbs"] = breadcrumbs
                 complete_graph.update(file_graph)
     
-    # Filtering Step:
-    # Only include calls to functions that:
-    #   a) Are defined in the codebase (keys in complete_graph)
-    #   b) Are not built-in functions.
+    # Filtering: Only include calls to functions that are defined in the codebase and are not built-ins.
     defined_functions = set(complete_graph.keys())
     built_in_names = {name for name, obj in vars(builtins).items() if callable(obj)}
     
@@ -80,7 +92,6 @@ def analyze_directory(directory):
             call for call in details["calls"]
             if call in defined_functions and call not in built_in_names
         ]
-    
     return complete_graph
 
 # --- Flask Routes ---

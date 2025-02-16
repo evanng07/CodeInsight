@@ -8,13 +8,13 @@ from tkinter import filedialog
 import time
 import webview
 
-# Import your Flask app, analyzer function, and updater function from app.py
+# Import your Flask app, analyzer function, and updater from app.py
 from app import app, analyze_directory, update_call_graph_data
 
 def select_directory():
     """Open a file dialog to select a project directory."""
     root = tk.Tk()
-    root.withdraw()  # Hide the main Tkinter window.
+    root.withdraw()  # Hide the main window.
     return filedialog.askdirectory(title="Select Project Directory")
 
 if __name__ == "__main__":
@@ -28,7 +28,6 @@ if __name__ == "__main__":
     project_name = os.path.basename(os.path.normpath(selected_dir))
     
     # 3. Determine the base directory for storing JSON files.
-    #    When packaged (frozen), use the executable's directory; otherwise, use the script's directory.
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -41,7 +40,7 @@ if __name__ == "__main__":
     # 5. Define the JSON file path for this project.
     json_file_path = os.path.join(jsons_dir, f"{project_name}.json")
     
-    # 6. Check if the JSON file already exists.
+    # 6. Check if the JSON file already exists; if not, perform analysis.
     if os.path.exists(json_file_path):
         print(f"JSON for project '{project_name}' found. Loading analysis from {json_file_path}.")
         with open(json_file_path, "r", encoding="utf-8") as f:
@@ -63,7 +62,7 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
-    # Give the Flask server a moment to start up.
+    # Wait briefly for the Flask server to start.
     time.sleep(1)
     
     # 9. Open the application in an embedded browser window using pywebview.
