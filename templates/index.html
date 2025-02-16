@@ -132,6 +132,42 @@
       fill: #ff0000;
       r: 4;
     }
+    /* Chatbot Styles */
+    #chatbot {
+      display: none; /* Hidden by default */
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      height: 400px;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      padding: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.7);
+      z-index: 2000;
+    }
+    #chatbot-header {
+      background: #2e2e2e;
+      padding: 5px;
+      cursor: move;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #chatbot-content {
+      height: 300px;
+      overflow-y: auto;
+      margin-top: 5px;
+      background: #121212;
+      padding: 5px;
+    }
+    #user-input {
+      width: 100%;
+      padding: 5px;
+      border: none;
+      border-radius: 4px;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -140,6 +176,7 @@
     <div id="controls">
       <input type="text" id="search-input" placeholder="Search functions..." list="search-suggestions">
       <datalist id="search-suggestions"></datalist>
+      <button id="chatbot-button">Open Chatbot</button>
     </div>
   </header>
   <div id="graph-container">
@@ -158,6 +195,16 @@
   </div>
   <!-- Container for minimized panels -->
   <div id="minimized-panels"></div>
+
+  <!-- Chatbot Interface -->
+  <div id="chatbot">
+    <div id="chatbot-header">
+      <span>Chatbot</span>
+      <button id="close-chatbot">X</button>
+    </div>
+    <div id="chatbot-content"></div>
+    <input type="text" id="user-input" placeholder="Type your question...">
+  </div>
 
   <!-- Include D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -544,6 +591,48 @@
       if (!event.active) simulation.alphaTarget(0);
       d.fx = null;
       d.fy = null;
+    }
+
+    document.getElementById("chatbot-button").addEventListener("click", function() {
+      document.getElementById("chatbot").style.display = "block";
+    });
+
+    document.getElementById("close-chatbot").addEventListener("click", function() {
+      document.getElementById("chatbot").style.display = "none";
+    });
+
+    document.getElementById("user-input").addEventListener("keypress", function(event) {
+      if (event.key === "Enter") {
+        const userInput = this.value;
+        if (userInput.trim() !== "") {
+          appendMessage("You: " + userInput);
+          this.value = ""; // Clear input field
+
+          // Send request to Flask backend
+          fetch('/chatbot', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ query: userInput })
+          })
+          .then(response => response.json())
+          .then(data => {
+            appendMessage("Chatbot: " + data.response);
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            appendMessage("Chatbot: Sorry, I couldn't respond.");
+          });
+        }
+      }
+    });
+
+    function appendMessage(message) {
+      const messageElement = document.createElement("div");
+      messageElement.textContent = message;
+      document.getElementById("chatbot-content").appendChild(messageElement);
+      document.getElementById("chatbot-content").scrollTop = document.getElementById("chatbot-content").scrollHeight; // Scroll to the bottom
     }
   </script>
 </body>
