@@ -9,13 +9,34 @@ import time
 import webview
 
 # Import your Flask app, analyzer function, and updater from app.py
-from app import app, analyze_directory, update_call_graph_data
+from app import app, analyze_directory, update_call_graph_data, analyze_file
 
 def select_directory():
     """Open a file dialog to select a project directory."""
     root = tk.Tk()
     root.withdraw()  # Hide the main window.
     return filedialog.askdirectory(title="Select Project Directory")
+
+def analyze_directory(directory):
+    """Analyze the directory and return only functions with code, ignoring node_modules and any env folders."""
+    complete_graph = {}
+    for root, dirs, files in os.walk(directory):
+        # Ignore node_modules and any directories that contain 'env'
+        if 'node_modules' in dirs:
+            dirs.remove('node_modules')  # This prevents os.walk from going into node_modules
+        
+        # Remove any directory that contains 'env' in its name
+        dirs[:] = [d for d in dirs if 'env' not in d.lower()]  # Ignore any directory with 'env' in its name
+
+        for file in files:
+            if file.endswith(".py"):
+                filepath = os.path.join(root, file)
+                file_graph = analyze_file(filepath)
+                # Only add functions with code to the complete graph
+                for func_name, func_info in file_graph.items():
+                    if func_info.get('code'):  # Check if there is code
+                        complete_graph[func_name] = func_info
+    return complete_graph
 
 if __name__ == "__main__":
     # 1. Ask the user to select a project directory.
@@ -57,7 +78,7 @@ if __name__ == "__main__":
     
     # 8. Start the Flask app in a background thread.
     def run_flask():
-        app.run(port=5000, debug=False)
+        app.run(host='0.0.0.0', port=5001, debug=False)
     
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -66,5 +87,5 @@ if __name__ == "__main__":
     time.sleep(1)
     
     # 9. Open the application in an embedded browser window using pywebview.
-    webview.create_window("Call Graph Visualizer", "http://localhost:5000")
+    webview.create_window("Call Graph Visualizer", "http://localhost:5001")
     webview.start()
