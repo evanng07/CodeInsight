@@ -7,36 +7,57 @@ import tkinter as tk
 from tkinter import filedialog
 import time
 import webview
+import builtins
 
-# Import your Flask app, analyzer function, and updater from app.py
-from app import app, analyze_directory, update_call_graph_data, analyze_file
+# Import your Flask app, the updater, and analyze_file from app.py
+from app import app, update_call_graph_data, analyze_file
+
+def analyze_directory(directory):
+    """
+    Analyze all Python files in the given directory (ignoring 'node_modules' and directories with 'env' in their name).
+    For each function found, add the following metadata:
+      - "file": Relative file path from the project root.
+      - "breadcrumbs": A string showing the file's directory hierarchy.
+    Then filter out call references to functions that are built-ins or not defined anywhere in the project.
+    """
+    complete_graph = {}
+    for root, dirs, files in os.walk(directory):
+        # Ignore 'node_modules' and any directory that contains 'env' in its name.
+        if 'node_modules' in dirs:
+            dirs.remove('node_modules')
+        dirs[:] = [d for d in dirs if 'env' not in d.lower()]
+        
+        for file in files:
+            if file.endswith(".py"):
+                filepath = os.path.join(root, file)
+                file_graph = analyze_file(filepath)
+                # Compute the relative path from the project root.
+                relative_path = os.path.relpath(filepath, directory)
+                # Create breadcrumbs by joining the parts of the relative path.
+                breadcrumbs = " > ".join(relative_path.split(os.sep))
+                # Add file metadata for each function.
+                for func_name, func_info in file_graph.items():
+                    if func_info.get('code'):  # Only include functions with code.
+                        file_graph[func_name]["file"] = relative_path
+                        file_graph[func_name]["breadcrumbs"] = breadcrumbs
+                        complete_graph[func_name] = file_graph[func_name]
+    
+    # Filtering step:
+    # Only keep calls that refer to functions defined in the project and that are not built-ins.
+    defined_functions = set(complete_graph.keys())
+    built_in_names = {name for name, obj in vars(builtins).items() if callable(obj)}
+    for func, details in complete_graph.items():
+        details["calls"] = [
+            call for call in details.get("calls", [])
+            if call in defined_functions and call not in built_in_names
+        ]
+    return complete_graph
 
 def select_directory():
     """Open a file dialog to select a project directory."""
     root = tk.Tk()
     root.withdraw()  # Hide the main window.
     return filedialog.askdirectory(title="Select Project Directory")
-
-def analyze_directory(directory):
-    """Analyze the directory and return only functions with code, ignoring node_modules and any env folders."""
-    complete_graph = {}
-    for root, dirs, files in os.walk(directory):
-        # Ignore node_modules and any directories that contain 'env'
-        if 'node_modules' in dirs:
-            dirs.remove('node_modules')  # This prevents os.walk from going into node_modules
-        
-        # Remove any directory that contains 'env' in its name
-        dirs[:] = [d for d in dirs if 'env' not in d.lower()]  # Ignore any directory with 'env' in its name
-
-        for file in files:
-            if file.endswith(".py"):
-                filepath = os.path.join(root, file)
-                file_graph = analyze_file(filepath)
-                # Only add functions with code to the complete graph
-                for func_name, func_info in file_graph.items():
-                    if func_info.get('code'):  # Check if there is code
-                        complete_graph[func_name] = func_info
-    return complete_graph
 
 if __name__ == "__main__":
     # 1. Ask the user to select a project directory.
