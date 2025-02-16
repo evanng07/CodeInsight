@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>Codebase Call Graph (Dark Mode)</title>
-  <!-- Highlight.js CSS for dark mode (using Atom One Dark theme) -->
+  <!-- Highlight.js CSS for dark mode (Atom One Dark theme) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+  <!-- Include Interact.js for draggable/resizable windows -->
+  <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
   <style>
     /* Dark Mode Styles */
     body {
@@ -16,6 +18,7 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
+      overflow: hidden;
     }
     header {
       background: #1f1f1f;
@@ -25,6 +28,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      z-index: 1000;
     }
     #controls {
       display: flex;
@@ -38,7 +42,6 @@
       font-size: 0.9em;
       width: 200px;
     }
-    /* Add datalist styling if needed */
     datalist option {
       font-size: 0.9em;
     }
@@ -56,6 +59,7 @@
       stroke: #121212;
       stroke-width: 1.5px;
       cursor: pointer;
+      fill: #69b3a2;
     }
     .link {
       stroke: #555;
@@ -66,32 +70,57 @@
       fill: #e0e0e0;
       pointer-events: none;
     }
-    /* Code display panel - hidden by default */
-    #code-display {
+    /* Code Panel Styles */
+    .code-panel {
       position: absolute;
-      top: 10px;
-      right: 10px;
       width: 35%;
-      height: 80%;
-      overflow-y: auto;
+      height: 40%;
       background: #1e1e1e;
       border: 1px solid #333;
       padding: 10px;
       font-family: "Courier New", Courier, monospace;
       box-shadow: 0 2px 5px rgba(0,0,0,0.7);
-      z-index: 10;
-      display: none;
+      z-index: 2000;
+      resize: both;
+      overflow: auto;
     }
-    #code-display pre {
+    .code-panel-header {
+      background: #2e2e2e;
+      padding: 5px;
+      cursor: move;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9em;
+    }
+    .code-panel-header button {
+      background: #007bff;
+      border: none;
+      color: white;
+      padding: 2px 6px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 0.8em;
+      margin-left: 5px;
+    }
+    .code-panel-content {
+      margin-top: 5px;
+    }
+    pre {
       margin: 0;
       padding: 0;
     }
-    .metadata {
-      background: #2e2e2e;
-      border-bottom: 1px solid #444;
+    /* Minimized panels container */
+    #minimized-panels {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #1f1f1f;
       padding: 5px;
-      margin-bottom: 10px;
-      font-size: 0.9em;
+      display: flex;
+      gap: 5px;
+      z-index: 3000;
     }
   </style>
 </head>
@@ -105,23 +134,25 @@
   </header>
   <div id="graph-container">
     <svg></svg>
-    <div id="code-display">
-      <!-- Code details will be displayed here on node selection -->
-    </div>
   </div>
+  <!-- Container for minimized panels -->
+  <div id="minimized-panels"></div>
 
   <!-- Include D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <!-- Include Highlight.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
-  <script>
+  <script type="module">
     hljs.highlightAll();
 
-    // Global variables for simulation and selections
+    // Global variables for simulation and selections.
     const svg = d3.select("svg");
     const container = svg.append("g");
     let simulation, link, node, labels;
     let allNodes = [], allLinks = [];
+    
+    // Global variable to track the selected node id.
+    let selectedNodeId = null;
     
     // Setup zoom behavior.
     const zoom = d3.zoom()
@@ -130,8 +161,139 @@
         container.attr("transform", event.transform);
       });
     svg.call(zoom);
+    
+    // Map to track open code panels.
+    const codePanels = new Map();
+    
+    // Reference to minimized panels container.
+    const minimizedContainer = document.getElementById("minimized-panels");
 
-    // Fetch the call graph data from the Flask endpoint.
+    // Function to create a code panel.
+    function createCodePanel(d) {
+      if (codePanels.has(d.id)) {
+        // Bring existing panel to front.
+        const existingPanel = codePanels.get(d.id);
+        existingPanel.style.zIndex = parseInt(existingPanel.style.zIndex) + 1;
+        return existingPanel;
+      }
+      
+      const panel = document.createElement("div");
+      panel.className = "code-panel";
+      panel.style.left = "20px";
+      panel.style.top = "20px";
+      panel.style.zIndex = "2000";
+      
+      const header = document.createElement("div");
+      header.className = "code-panel-header";
+      header.innerHTML = `<span>${d.id}</span>`;
+      
+      const btnContainer = document.createElement("div");
+      
+      // Minimize button: instead of toggling content, it minimizes the whole panel.
+      const minimizeBtn = document.createElement("button");
+      minimizeBtn.textContent = "_";
+      minimizeBtn.title = "Minimize";
+      minimizeBtn.addEventListener("click", () => {
+        panel.style.display = "none";
+        // Create a minimized button.
+        const minBtn = document.createElement("button");
+        minBtn.textContent = d.id;
+        minBtn.title = "Restore";
+        minBtn.style.padding = "5px 10px";
+        minBtn.style.background = "#007bff";
+        minBtn.style.border = "none";
+        minBtn.style.borderRadius = "3px";
+        minBtn.style.cursor = "pointer";
+        // When clicked, remove the minimized button and restore the panel.
+        minBtn.addEventListener("click", () => {
+          panel.style.display = "block";
+          minimizedContainer.removeChild(minBtn);
+        });
+        minimizedContainer.appendChild(minBtn);
+      });
+      
+      // Close button to remove the panel.
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "X";
+      closeBtn.title = "Close";
+      closeBtn.addEventListener("click", () => {
+        panel.remove();
+        codePanels.delete(d.id);
+      });
+      
+      btnContainer.appendChild(minimizeBtn);
+      btnContainer.appendChild(closeBtn);
+      header.appendChild(btnContainer);
+      panel.appendChild(header);
+      
+      const contentDiv = document.createElement("div");
+      contentDiv.className = "code-panel-content";
+      contentDiv.innerHTML = `
+        <div class="metadata">
+          <strong>File:</strong> ${d.file}<br>
+          <strong>Path:</strong> ${d.breadcrumbs}
+        </div>
+        <pre><code class="python">${d.code}</code></pre>
+      `;
+      panel.appendChild(contentDiv);
+      
+      document.body.appendChild(panel);
+      
+      // Make panel draggable and resizable using Interact.js.
+      interact(panel)
+        .draggable({
+          allowFrom: '.code-panel-header',
+          listeners: {
+            move (event) {
+              const target = event.target;
+              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+              target.style.transform = `translate(${x}px, ${y}px)`;
+              target.setAttribute('data-x', x);
+              target.setAttribute('data-y', y);
+            }
+          }
+        })
+        .resizable({
+          edges: { left: true, right: true, bottom: true, top: true },
+          listeners: {
+            move (event) {
+              let { x, y } = event.target.dataset;
+              x = parseFloat(x) || 0;
+              y = parseFloat(y) || 0;
+              event.target.style.width = event.rect.width + 'px';
+              event.target.style.height = event.rect.height + 'px';
+              x += event.deltaRect.left;
+              y += event.deltaRect.top;
+              event.target.style.transform = `translate(${x}px, ${y}px)`;
+              event.target.dataset.x = x;
+              event.target.dataset.y = y;
+            }
+          },
+          modifiers: [
+            interact.modifiers.restrictEdges({
+              outer: document.body,
+              endOnly: true,
+            }),
+            interact.modifiers.restrictSize({
+              min: { width: 200, height: 100 },
+              max: { width: 800, height: 600 }
+            })
+          ],
+          inertia: true
+        });
+      
+      hljs.highlightElement(panel.querySelector("pre code"));
+      codePanels.set(d.id, panel);
+      return panel;
+    }
+    
+    // Function to open (or bring forward) the code panel for a node.
+    function openCodePanelForNode(d) {
+      createCodePanel(d);
+    }
+    
+    // Fetch and build graph.
     fetch('/data')
       .then(response => response.json())
       .then(data => {
@@ -139,7 +301,6 @@
         const nodeSet = new Set();
         const links = [];
         
-        // Build nodes and links arrays.
         for (const func in data) {
           nodeSet.add(func);
           data[func].calls.forEach(calledFunc => {
@@ -158,7 +319,6 @@
         allNodes = nodes;
         allLinks = links;
         
-        // Populate datalist with all function names.
         const datalist = document.getElementById("search-suggestions");
         nodes.forEach(n => {
           const option = document.createElement("option");
@@ -169,13 +329,11 @@
         const width = svg.node().clientWidth;
         const height = svg.node().clientHeight;
         
-        // Create force simulation.
         simulation = d3.forceSimulation(nodes)
           .force("link", d3.forceLink(links).id(d => d.id).distance(150))
           .force("charge", d3.forceManyBody().strength(-400))
           .force("center", d3.forceCenter(width / 2, height / 2));
         
-        // Draw links.
         link = container.append("g")
             .attr("class", "links")
           .selectAll("line")
@@ -184,7 +342,6 @@
             .attr("class", "link")
             .attr("stroke-width", 1.5);
         
-        // Draw nodes.
         node = container.append("g")
             .attr("class", "nodes")
           .selectAll("circle")
@@ -198,11 +355,12 @@
               .on("drag", dragged)
               .on("end", dragended))
             .on("click", function(event, d) {
-              showNodeDetails(d);
+              selectedNodeId = d.id;
+              updateNodeStyles();
+              openCodePanelForNode(d);
               zoomToNode(d);
             });
         
-        // Draw labels.
         labels = container.append("g")
             .attr("class", "labels")
           .selectAll("text")
@@ -223,75 +381,58 @@
               .attr("cy", d => d.y);
           labels
               .attr("x", d => d.x)
-              .attr("y", d => d.y);
+              .attr("y", d => d.y)
+              .attr("dy", d => d.id === selectedNodeId ? -25 : -15);
         });
       });
     
-    // Function to show details in the code display panel.
-    function showNodeDetails(d) {
-      const codeDisplay = document.getElementById("code-display");
-      codeDisplay.style.display = "block";
-      codeDisplay.innerHTML = `
-        <div class="metadata">
-          <strong>File:</strong> ${d.file}<br>
-          <strong>Path:</strong> ${d.breadcrumbs}
-        </div>
-        <pre><code class="python">${d.code}</code></pre>
-      `;
-      hljs.highlightElement(document.querySelector("#code-display pre code"));
+    function updateNodeStyles() {
+      node.attr("fill", d => d.id === selectedNodeId ? "#007bff" : "#69b3a2")
+          .attr("stroke", d => d.id === selectedNodeId ? "#0056b3" : "#121212")
+          .attr("stroke-width", d => d.id === selectedNodeId ? 3 : 1.5)
+          .attr("r", d => d.id === selectedNodeId ? 20 : 10);
     }
     
-    // Function to smoothly zoom into a node.
     function zoomToNode(d) {
       const svgEl = svg.node();
       const width = svgEl.clientWidth;
       const height = svgEl.clientHeight;
-      const scale = 2; // desired zoom scale
+      const scale = 2;
       const x = d.x;
       const y = d.y;
-      // Compute new transform.
       const translate = [width / 2 - scale * x, height / 2 - scale * y];
       svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
     }
     
-    // Search functionality.
     const searchInput = document.getElementById("search-input");
-    // On change event: exact match behavior.
     searchInput.addEventListener("change", () => {
       const query = searchInput.value.trim().toLowerCase();
       const exactMatch = allNodes.find(n => n.id.toLowerCase() === query);
       if (exactMatch) {
-        // Show details and zoom to exact match.
-        showNodeDetails(exactMatch);
+        selectedNodeId = exactMatch.id;
+        updateNodeStyles();
+        openCodePanelForNode(exactMatch);
         zoomToNode(exactMatch);
-        // Highlight the exact node.
-        node.attr("fill", d => d.id.toLowerCase() === query ? "#007bff" : "#69b3a2")
-            .attr("r", d => d.id.toLowerCase() === query ? 20 : 10)
-            .attr("opacity", d => d.id.toLowerCase() === query ? 1 : 0.2);
-        link.attr("opacity", d => (d.source.id.toLowerCase() === query || d.target.id.toLowerCase() === query) ? 1 : 0.1);
+      } else {
+        selectedNodeId = null;
+        updateNodeStyles();
       }
     });
     
-    // On keyup event: if no exact match, apply partial filtering.
     searchInput.addEventListener("keyup", () => {
       const query = searchInput.value.trim().toLowerCase();
-      const exactMatches = allNodes.filter(n => n.id.toLowerCase() === query);
-      if (query && exactMatches.length === 1) {
-        // If there's an exact match, highlight it.
-        node.attr("fill", d => d.id.toLowerCase() === query ? "#007bff" : "#69b3a2")
-            .attr("r", d => d.id.toLowerCase() === query ? 20 : 10)
-            .attr("opacity", d => d.id.toLowerCase() === query ? 1 : 0.2);
-        link.attr("opacity", d => (d.source.id.toLowerCase() === query || d.target.id.toLowerCase() === query) ? 1 : 0.1);
+      const exactMatch = allNodes.find(n => n.id.toLowerCase() === query);
+      if (query && exactMatch) {
+        selectedNodeId = exactMatch.id;
+        updateNodeStyles();
+        openCodePanelForNode(exactMatch);
+        zoomToNode(exactMatch);
       } else {
-        // Otherwise, perform partial matching.
-        node.attr("fill", "#69b3a2")
-            .attr("opacity", d => d.id.toLowerCase().includes(query) ? 1 : 0.2)
-            .attr("r", d => d.id.toLowerCase().includes(query) ? 15 : 10);
-        link.attr("opacity", d => (d.source.id.toLowerCase().includes(query) || d.target.id.toLowerCase().includes(query)) ? 1 : 0.1);
+        selectedNodeId = null;
+        updateNodeStyles();
       }
     });
     
-    // Drag event functions.
     function dragstarted(event, d) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       d.fx = d.x;
