@@ -311,46 +311,6 @@
       createCodePanel(d);
     }
     
-    // Function to animate a dot along an edge.
-    function animateEdgeDot(edge, duration = 2000) {
-      // Remove any existing animated dot on this edge.
-      d3.select(edge).select("circle.edge-dot").remove();
-
-      // Append a small circle (dot) to the container.
-      const d = edge.__data__;
-      const x1 = d.source.x, y1 = d.source.y;
-      const x2 = d.target.x, y2 = d.target.y;
-      
-      // Create the dot.
-      const dot = container.append("circle")
-        .attr("class", "edge-dot")
-        .attr("r", 4)
-        .attr("fill", "#ff0000")
-        .attr("cx", x1)
-        .attr("cy", y1);
-      
-      // Calculate the total distance.
-      const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-
-      // Animate the dot along the line.
-      function repeat() {
-        dot
-          .attr("cx", x1)
-          .attr("cy", y1)
-          .transition()
-          .duration(duration)
-          .ease(d3.easeLinear)
-          .attrTween("transform", function() {
-            return function(t) {
-              const x = x1 + (x2 - x1) * t;
-              const y = y1 + (y2 - y1) * t;
-              return `translate(${x - x1},${y - y1})`;
-            };
-          })
-          .on("end", repeat);
-      }
-      repeat();
-    }
     
     // Function to animate dots on all edges connected to the selected node.
     function animateSelectedEdges(selected) {
@@ -495,16 +455,6 @@
       animateSelectedEdges(selected);
     }
     
-    function animateSelectedEdges(selected) {
-      // Remove any existing animated dots.
-      container.selectAll("circle.edge-dot").remove();
-      // For each link connected to the selected node, animate a dot.
-      link.each(function(d) {
-        if (d.source.id === selected.id || d.target.id === selected.id) {
-          animateEdgeDot(this);
-        }
-      });
-    }
     
     // Animate a dot along a given edge.
     function animateEdgeDot(edge, duration = 2000) {
