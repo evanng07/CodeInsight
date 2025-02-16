@@ -143,6 +143,33 @@ def call_groq_chat(query):
     except Exception as e:
         return f"Error calling Groq API: {str(e)}"
     
+@app.route('/summary', methods=['POST'])
+def summary():
+    data = request.get_json()
+    prompt = data.get('prompt')
+    if not prompt:
+        return jsonify({'response': 'No prompt provided.'}), 400
+    try:
+        client = current_app.config['GROQ_CLIENT'] 
+        # Create a summary request to your LLM via Groq.
+        # You might add a system message if needed.
+        completion = client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=[
+                {"role": "system", "content": "You are an expert code analyzer. Explain how these functions work together."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=1,
+            max_completion_tokens=1024,
+            top_p=1,
+            stream=False,
+            stop=None,
+        )
+        answer = completion.choices[0].message.content
+        return jsonify({'response': answer})
+    except Exception as e:
+        return jsonify({'response': f"Error generating summary: {str(e)}"}), 500
+    
 if __name__ == "__main__":
     # Optionally, update call_graph_data here by analyzing a directory:
     # call_graph_data = analyze_directory("your_code_directory")

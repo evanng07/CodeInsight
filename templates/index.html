@@ -34,12 +34,26 @@
       font-size: 1.2em;
       font-weight: bold;
     }
-    /* We'll remove the default search input from header */
+    /* Header controls now include a Show Summary button */
     #controls {
       display: flex;
       align-items: center;
       gap: 10px;
     }
+    #show-summary-button {
+      padding: 6px 10px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #2e2e2e;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background 0.3s ease;
+    }
+    #show-summary-button:hover {
+      background: #007bff;
+    }
+    /* Graph container and SVG remain unchanged */
     #graph-container {
       flex: 1;
       position: relative;
@@ -83,6 +97,7 @@
       z-index: 2000;
       resize: both;
       overflow: auto;
+      box-sizing: border-box;
     }
     .code-panel-header {
       background: #2e2e2e;
@@ -149,7 +164,7 @@
     #chatbot.open {
       transform: translateY(-20px); /* Slides up into view */
     }
-    /* Chatbot Header (acts as toggle) */
+    /* Chatbot Header (acts as a toggle) */
     #chatbot-header {
       background: #2e2e2e;
       padding: 10px;
@@ -237,10 +252,10 @@
       z-index: 2200;
       transition: opacity 0.3s ease;
     }
-    /* Search Panel Styles */
+    /* Search Panel Styles (at top right) */
     #search-panel {
       position: fixed;
-      top: 50px; /* Above open buttons */
+      top: 60px;
       right: 20px;
       width: 300px;
       background: #222;
@@ -287,7 +302,7 @@
     /* Open Search Button */
     #open-search-button {
       position: fixed;
-      top: 50px;
+      top: 60px;
       right: 20px;
       width: 50px;
       height: 50px;
@@ -303,13 +318,51 @@
       z-index: 2300;
       transition: opacity 0.3s ease;
     }
+    /* Summary Modal Styles */
+    #summary-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 400px;
+      max-width: 90%;
+      background: #222;
+      border: 1px solid #444;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.9);
+      z-index: 2400;
+      display: none;
+      flex-direction: column;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    #summary-modal-header {
+      font-size: 1.2em;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #summary-modal-header button {
+      background: transparent;
+      border: none;
+      color: #e0e0e0;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+    #summary-modal-content {
+      flex: 1;
+      overflow-y: auto;
+      color: #e0e0e0;
+      line-height: 1.5em;
+    }
   </style>
 </head>
 <body>
   <header>
     <div>CodeInsight</div>
     <div id="controls">
-      <!-- Removed default search input -->
+      <!-- Add Show Summary Button in the top right -->
+      <button id="show-summary-button">Show Summary</button>
     </div>
   </header>
   <div id="graph-container">
@@ -345,7 +398,7 @@
   <!-- Search Panel -->
   <div id="search-panel">
     <div id="search-panel-header">
-      <span>Search</span>
+      <span>Search Functions</span>
       <button id="close-search-panel">×</button>
     </div>
     <input type="text" id="search-bar-input" placeholder="Search functions..." list="search-suggestions">
@@ -354,6 +407,15 @@
   
   <!-- Open Search Button -->
   <div id="open-search-button">🔍</div>
+  
+  <!-- Summary Modal -->
+  <div id="summary-modal">
+    <div id="summary-modal-header">
+      <span>Functions Summary</span>
+      <button id="close-summary-modal">×</button>
+    </div>
+    <div id="summary-modal-content"></div>
+  </div>
 
   <!-- Include D3.js -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -386,7 +448,7 @@
       const panel = document.createElement("div");
       panel.className = "code-panel";
       panel.style.left = `${10 + (codePanels.size * 30)}px`;
-      panel.style.top = `${50 + (codePanels.size * 30)}px`;
+      panel.style.top = `${20 + (codePanels.size * 30)}px`;
       panel.style.zIndex = "2000";
       
       const header = document.createElement("div");
@@ -677,6 +739,48 @@
       setTimeout(() => { openSearchButton.style.opacity = "1"; }, 300);
     });
     
+    // Summary feature: When "Show Summary" is clicked, gather code from open panels and call the LLM.
+    document.getElementById("show-summary-button").addEventListener("click", () => {
+      // Gather code snippets from all open panels.
+      let prompt = "Explain how these functions work together:\n\n";
+      codePanels.forEach((panel, funcId) => {
+        // Only include panels that are visible (i.e. not minimized)
+        if (panel.style.display !== "none") {
+          const codeElement = panel.querySelector("pre code");
+          const codeText = codeElement ? codeElement.innerText : "";
+          prompt += `Function ${funcId}:\n${codeText}\n\n`;
+        }
+      });
+      
+      // Call the summary endpoint on your backend.
+      fetch('/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt })
+      })
+      .then(response => response.json())
+      .then(data => {
+        showSummaryModal(data.response);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showSummaryModal("Sorry, could not generate summary.");
+      });
+    });
+    
+    // Function to display the summary in a modal popup.
+    function showSummaryModal(summaryText) {
+      const modal = document.getElementById("summary-modal");
+      const modalContent = document.getElementById("summary-modal-content");
+      modalContent.innerText = summaryText;
+      modal.style.display = "flex";
+    }
+    
+    // Close summary modal when close button is clicked.
+    document.getElementById("close-summary-modal").addEventListener("click", () => {
+      document.getElementById("summary-modal").style.display = "none";
+    });
+    
     // Chatbot messaging and loading indicator.
     function appendMessage(message, type, element = null) {
       const chatbotContent = document.getElementById("chatbot-content");
@@ -762,5 +866,14 @@
       }
     });
   </script>
+  
+  <!-- Summary Modal -->
+  <div id="summary-modal">
+    <div id="summary-modal-header">
+      <span>Functions Summary</span>
+      <button id="close-summary-modal">×</button>
+    </div>
+    <div id="summary-modal-content"></div>
+  </div>
 </body>
 </html>
