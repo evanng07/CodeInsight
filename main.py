@@ -8,9 +8,24 @@ from tkinter import filedialog
 import time
 import webview
 import builtins
+from dotenv import load_dotenv  # Load environment variables
+from groq import Groq
+from flask import Flask
+from app import app, update_call_graph_data,analyze_file  # Import the Flask app from app.py
 
-# Import your Flask app, the updater, and analyze_file from app.py
-from app import app, update_call_graph_data, analyze_file
+# Load environment variables from .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+# Access the GROQ_API_KEY
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    raise ValueError("GROQ_API_KEY environment variable is not set.")
+
+# Initialize the Groq client with the API key
+client = Groq(api_key=api_key)
+
+# Pass the client to the app
+app.config['GROQ_CLIENT'] = client  # Store the client in the app's config
 
 def analyze_directory(directory):
     """

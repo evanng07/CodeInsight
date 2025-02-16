@@ -1,4 +1,6 @@
 export default class CodePanel {
+    static panelCount = 0; // Track the number of open panels
+
     constructor() {
       this.panel = document.createElement("div");
       this.panel.id = "code-panel";
@@ -37,7 +39,26 @@ export default class CodePanel {
       this.closeBtn.addEventListener("click", () => this.hide());
       this.panel.appendChild(this.closeBtn);
   
+      // Add this in the constructor after creating the close button
+      this.analyzeBtn = document.createElement("button");
+      this.analyzeBtn.textContent = "Analyze";
+      this.analyzeBtn.style.position = "absolute";
+      this.analyzeBtn.style.top = "5px";
+      this.analyzeBtn.style.right = "60px"; // Adjust position to the left of the close button
+      this.analyzeBtn.addEventListener("click", () => this.analyze());
+      this.panel.appendChild(this.analyzeBtn);
+  
+      this.setPosition(); // Set the position when the panel is created
       document.body.appendChild(this.panel);
+    }
+  
+    setPosition() {
+      const offset = 30; // Offset for each new panel
+      const x = 10 + (CodePanel.panelCount * offset); // Calculate new x position
+      const y = 10; // Keep y position constant
+      this.panel.style.top = `${y}px`;
+      this.panel.style.right = `${x}px`;
+      CodePanel.panelCount++; // Increment the panel count
     }
   
     // Method to open the panel with given details.
@@ -60,7 +81,37 @@ export default class CodePanel {
     }
   
     hide() {
+      CodePanel.panelCount--; // Decrement the panel count when hiding
       this.panel.style.display = "none";
+    }
+  
+    analyze() {
+      const functionName = this.metadata.querySelector("strong:nth-child(3)").nextSibling.textContent.trim(); // Get the function name
+      const question = `How does this ${functionName} work?`;
+      
+      // Send the question to the Flask app
+      fetch('/chatbot', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query: question })
+      })
+      .then(response => response.json())
+      .then(data => {
+          // Handle the response from the chatbot
+          const chatbotResponse = data.response;
+          // Display the response in the chatbot content area
+          const chatbotContent = document.getElementById("chatbot-content");
+          const messageElement = document.createElement("div");
+          messageElement.textContent = chatbotResponse;
+          messageElement.classList.add("bot-message");
+          chatbotContent.appendChild(messageElement);
+          chatbotContent.scrollTop = chatbotContent.scrollHeight; // Scroll to the bottom
+      })
+      .catch(error => {
+          console.error('Error:', error);
+      });
     }
   
     // Optionally, add methods to minimize, resize, etc.
