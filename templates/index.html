@@ -739,47 +739,53 @@
       setTimeout(() => { openSearchButton.style.opacity = "1"; }, 300);
     });
     
-    // Summary feature: When "Show Summary" is clicked, gather code from open panels and call the LLM.
     document.getElementById("show-summary-button").addEventListener("click", () => {
-      // Gather code snippets from all open panels.
-      let prompt = "Explain how these functions work together:\n\n";
-      codePanels.forEach((panel, funcId) => {
-        // Only include panels that are visible (i.e. not minimized)
-        if (panel.style.display !== "none") {
-          const codeElement = panel.querySelector("pre code");
-          const codeText = codeElement ? codeElement.innerText : "";
-          prompt += `Function ${funcId}:\n${codeText}\n\n`;
-        }
-      });
-      
-      // Call the summary endpoint on your backend.
-      fetch('/summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt })
-      })
-      .then(response => response.json())
-      .then(data => {
-        showSummaryModal(data.response);
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        showSummaryModal("Sorry, could not generate summary.");
-      });
-    });
-    
-    // Function to display the summary in a modal popup.
-    function showSummaryModal(summaryText) {
-      const modal = document.getElementById("summary-modal");
-      const modalContent = document.getElementById("summary-modal-content");
-      modalContent.innerText = summaryText;
-      modal.style.display = "flex";
+  const modal = document.getElementById("summary-modal");
+  // If modal is visible, close it and return.
+  if (modal.style.display === "flex") {
+    modal.style.display = "none";
+    return;
+  }
+  
+  // Otherwise, gather code snippets from all open panels.
+  let prompt = "Explain how these functions work together:\n\n";
+  codePanels.forEach((panel, funcId) => {
+    // Only include panels that are visible (i.e. not minimized)
+    if (panel.style.display !== "none") {
+      const codeElement = panel.querySelector("pre code");
+      const codeText = codeElement ? codeElement.innerText : "";
+      prompt += `Function ${funcId}:\n${codeText}\n\n`;
     }
-    
-    // Close summary modal when close button is clicked.
-    document.getElementById("close-summary-modal").addEventListener("click", () => {
-      document.getElementById("summary-modal").style.display = "none";
-    });
+  });
+  
+  // Call the summary endpoint on your backend.
+  fetch('/summary', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: prompt })
+  })
+  .then(response => response.json())
+  .then(data => {
+    showSummaryModal(data.response);
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    showSummaryModal("Sorry, could not generate summary.");
+  });
+});
+
+// Function to display the summary in a modal popup.
+function showSummaryModal(summaryText) {
+  const modal = document.getElementById("summary-modal");
+  const modalContent = document.getElementById("summary-modal-content");
+  modalContent.innerText = summaryText;
+  modal.style.display = "flex";
+}
+
+// Close summary modal when close button is clicked.
+document.getElementById("close-summary-modal").addEventListener("click", () => {
+  document.getElementById("summary-modal").style.display = "none";
+});
     
     // Chatbot messaging and loading indicator.
     function appendMessage(message, type, element = null) {
